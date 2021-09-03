@@ -6,7 +6,7 @@ project "ImGUI"
     staticruntime "on"
 
     targetdir ( "bin/" .. out_dir .. "/%{prj.name}")
-    objdir ( "bin-int" .. out_dir .. "/%{prj.name}")
+    objdir ( "bin-int/" .. out_dir .. "/%{prj.name}")
 
     files {
         "imconfig.h",
