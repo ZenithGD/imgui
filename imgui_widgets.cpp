@@ -604,13 +604,12 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
         bool nav_activated_by_code = (g.NavActivateId == id);
         bool nav_activated_by_inputs = IsNavInputTest(ImGuiNavInput_Activate, (flags & ImGuiButtonFlags_Repeat) ? ImGuiInputReadMode_Repeat : ImGuiInputReadMode_Pressed);
         if (nav_activated_by_code || nav_activated_by_inputs)
-            pressed = true;
-        if (nav_activated_by_code || nav_activated_by_inputs || g.ActiveId == id)
         {
             // Set active id so it can be queried by user via IsItemActive(), equivalent of holding the mouse button.
-            g.NavActivateId = id; // This is so SetActiveId assign a Nav source
+            pressed = true;
             SetActiveID(id, window);
-            if ((nav_activated_by_code || nav_activated_by_inputs) && !(flags & ImGuiButtonFlags_NoNavFocus))
+            g.ActiveIdSource = ImGuiInputSource_Nav;
+            if (!(flags & ImGuiButtonFlags_NoNavFocus))
                 SetFocusID(id, window);
         }
     }
@@ -1581,7 +1580,7 @@ bool ImGui::BeginCombo(const char* label, const char* preview_value, ImGuiComboF
     bool pressed = ButtonBehavior(bb, id, &hovered, &held);
     const ImGuiID popup_id = ImHashStr("##ComboPopup", 0, id);
     bool popup_open = IsPopupOpen(popup_id, ImGuiPopupFlags_None);
-    if ((pressed || g.NavActivateId == id) && !popup_open)
+    if (pressed && !popup_open)
     {
         OpenPopupEx(popup_id, ImGuiPopupFlags_None);
         popup_open = true;
@@ -2416,7 +2415,6 @@ bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data,
                 temp_input_is_active = true;
         }
         // Experimental: simple click (without moving) turns Drag into an InputText
-        // FIXME: Currently polling ImGuiConfigFlags_IsTouchScreen, may either poll an hypothetical ImGuiBackendFlags_HasKeyboard and/or an explicit drag settings.
         if (g.IO.ConfigDragClickToInputText && temp_input_allowed && !temp_input_is_active)
             if (g.ActiveId == id && hovered && g.IO.MouseReleased[0] && !IsMouseDragPastThreshold(0, g.IO.MouseDragThreshold * DRAG_MOUSE_THRESHOLD_FACTOR))
             {
@@ -6870,37 +6868,29 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
         // Close menu when not hovering it anymore unless we are moving roughly in the direction of the menu
         // Implement http://bjk5.com/post/44698559168/breaking-down-amazons-mega-dropdown to avoid using timers, so menus feels more reactive.
         bool moving_toward_other_child_menu = false;
-
         ImGuiWindow* child_menu_window = (g.BeginPopupStack.Size < g.OpenPopupStack.Size && g.OpenPopupStack[g.BeginPopupStack.Size].SourceWindow == window) ? g.OpenPopupStack[g.BeginPopupStack.Size].Window : NULL;
         if (g.HoveredWindow == window && child_menu_window != NULL && !(window->Flags & ImGuiWindowFlags_MenuBar))
         {
-            // FIXME-DPI: Values should be derived from a master "scale" factor.
+            float ref_unit = g.FontSize; // FIXME-DPI
             ImRect next_window_rect = child_menu_window->Rect();
-            ImVec2 ta = g.IO.MousePos - g.IO.MouseDelta;
+            ImVec2 ta = (g.IO.MousePos - g.IO.MouseDelta);
             ImVec2 tb = (window->Pos.x < child_menu_window->Pos.x) ? next_window_rect.GetTL() : next_window_rect.GetTR();
             ImVec2 tc = (window->Pos.x < child_menu_window->Pos.x) ? next_window_rect.GetBL() : next_window_rect.GetBR();
-            float extra = ImClamp(ImFabs(ta.x - tb.x) * 0.30f, 5.0f, 30.0f);    // add a bit of extra slack.
-            ta.x += (window->Pos.x < child_menu_window->Pos.x) ? -0.5f : +0.5f; // to avoid numerical issues
-            tb.y = ta.y + ImMax((tb.y - extra) - ta.y, -100.0f);                // triangle is maximum 200 high to limit the slope and the bias toward large sub-menus // FIXME: Multiply by fb_scale?
-            tc.y = ta.y + ImMin((tc.y + extra) - ta.y, +100.0f);
+            float extra = ImClamp(ImFabs(ta.x - tb.x) * 0.30f, ref_unit * 0.5f, ref_unit * 2.5f);   // add a bit of extra slack.
+            ta.x += (window->Pos.x < child_menu_window->Pos.x) ? -0.5f : +0.5f;                     // to avoid numerical issues (FIXME: ??)
+            tb.y = ta.y + ImMax((tb.y - extra) - ta.y, -ref_unit * 8.0f);                           // triangle is maximum 200 high to limit the slope and the bias toward large sub-menus // FIXME: Multiply by fb_scale?
+            tc.y = ta.y + ImMin((tc.y + extra) - ta.y, +ref_unit * 8.0f);
             moving_toward_other_child_menu = ImTriangleContainsPoint(ta, tb, tc, g.IO.MousePos);
-            //GetForegroundDrawList()->AddTriangleFilled(ta, tb, tc, moving_within_opened_triangle ? IM_COL32(0,128,0,128) : IM_COL32(128,0,0,128)); // [DEBUG]
+            //GetForegroundDrawList()->AddTriangleFilled(ta, tb, tc, moving_toward_other_child_menu ? IM_COL32(0,128,0,128) : IM_COL32(128,0,0,128)); // [DEBUG]
         }
-
-        // FIXME: Hovering a disabled BeginMenu or MenuItem won't close us
         if (menu_is_open && !hovered && g.HoveredWindow == window && g.HoveredIdPreviousFrame != 0 && g.HoveredIdPreviousFrame != id && !moving_toward_other_child_menu)
             want_close = true;
 
-        if (!menu_is_open && hovered && pressed) // Click to open
+        // Open
+        if (!menu_is_open && pressed) // Click/activate to open
             want_open = true;
         else if (!menu_is_open && hovered && !moving_toward_other_child_menu) // Hover to open
             want_open = true;
-
-        if (g.NavActivateId == id)
-        {
-            want_close = menu_is_open;
-            want_open = !menu_is_open;
-        }
         if (g.NavId == id && g.NavMoveDir == ImGuiDir_Right) // Nav-Right to open
         {
             want_open = true;
