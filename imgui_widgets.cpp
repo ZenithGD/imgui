@@ -273,6 +273,7 @@ void ImGui::TextV(const char* fmt, va_list args)
     if (window->SkipItems)
         return;
 
+    // FIXME-OPT: Handle the %s shortcut?
     ImGuiContext& g = *GImGui;
     const char* text_end = g.TempBuffer + ImFormatStringV(g.TempBuffer, IM_ARRAYSIZE(g.TempBuffer), fmt, args);
     TextEx(g.TempBuffer, text_end, ImGuiTextFlags_NoWidthForLargeClippedText);
@@ -2405,20 +2406,23 @@ bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data,
         const bool focus_requested = temp_input_allowed && (g.LastItemData.StatusFlags & ImGuiItemStatusFlags_Focused) != 0;
         const bool clicked = (hovered && g.IO.MouseClicked[0]);
         const bool double_clicked = (hovered && g.IO.MouseDoubleClicked[0]);
-        if (focus_requested || clicked || double_clicked || g.NavActivateId == id || g.NavInputId == id)
+        if (focus_requested || clicked || double_clicked || g.NavActivateId == id || g.NavActivateInputId == id)
         {
             SetActiveID(id, window);
             SetFocusID(id, window);
             FocusWindow(window);
             g.ActiveIdUsingNavDirMask = (1 << ImGuiDir_Left) | (1 << ImGuiDir_Right);
-            if (temp_input_allowed && (focus_requested || (clicked && g.IO.KeyCtrl) || double_clicked || g.NavInputId == id))
-                temp_input_is_active = true;
+            if (temp_input_allowed)
+                if (focus_requested || (clicked && g.IO.KeyCtrl) || double_clicked || g.NavActivateInputId == id)
+                    temp_input_is_active = true;
         }
+
         // Experimental: simple click (without moving) turns Drag into an InputText
         if (g.IO.ConfigDragClickToInputText && temp_input_allowed && !temp_input_is_active)
             if (g.ActiveId == id && hovered && g.IO.MouseReleased[0] && !IsMouseDragPastThreshold(0, g.IO.MouseDragThreshold * DRAG_MOUSE_THRESHOLD_FACTOR))
             {
-                g.NavInputId = id;
+                g.NavActivateId = g.NavActivateInputId = id;
+                g.NavActivateFlags = ImGuiActivateFlags_PreferInput;
                 temp_input_is_active = true;
             }
     }
@@ -3019,13 +3023,13 @@ bool ImGui::SliderScalar(const char* label, ImGuiDataType data_type, void* p_dat
     {
         const bool focus_requested = temp_input_allowed && (g.LastItemData.StatusFlags & ImGuiItemStatusFlags_Focused) != 0;
         const bool clicked = (hovered && g.IO.MouseClicked[0]);
-        if (focus_requested || clicked || g.NavActivateId == id || g.NavInputId == id)
+        if (focus_requested || clicked || g.NavActivateId == id || g.NavActivateInputId == id)
         {
             SetActiveID(id, window);
             SetFocusID(id, window);
             FocusWindow(window);
             g.ActiveIdUsingNavDirMask |= (1 << ImGuiDir_Left) | (1 << ImGuiDir_Right);
-            if (temp_input_allowed && (focus_requested || (clicked && g.IO.KeyCtrl) || g.NavInputId == id))
+            if (temp_input_allowed && (focus_requested || (clicked && g.IO.KeyCtrl) || g.NavActivateInputId == id))
                 temp_input_is_active = true;
         }
     }
@@ -3177,7 +3181,7 @@ bool ImGui::VSliderScalar(const char* label, const ImVec2& size, ImGuiDataType d
         format = PatchFormatStringFloatToInt(format);
 
     const bool hovered = ItemHoverable(frame_bb, id);
-    if ((hovered && g.IO.MouseClicked[0]) || g.NavActivateId == id || g.NavInputId == id)
+    if ((hovered && g.IO.MouseClicked[0]) || g.NavActivateId == id || g.NavActivateInputId == id)
     {
         SetActiveID(id, window);
         SetFocusID(id, window);
@@ -4019,7 +4023,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     const bool focus_requested_by_tabbing = (item_status_flags & ImGuiItemStatusFlags_FocusedByTabbing) != 0;
 
     const bool user_clicked = hovered && io.MouseClicked[0];
-    const bool user_nav_input_start = (g.ActiveId != id) && ((g.NavInputId == id) || (g.NavActivateId == id && g.NavInputSource == ImGuiInputSource_Keyboard));
+    const bool user_nav_input_start = (g.ActiveId != id) && ((g.NavActivateInputId == id) || (g.NavActivateId == id && g.NavInputSource == ImGuiInputSource_Keyboard));
     const bool user_scroll_finish = is_multiline && state != NULL && g.ActiveId == 0 && g.ActiveIdPreviousFrame == GetWindowScrollbarID(draw_window, ImGuiAxis_Y);
     const bool user_scroll_active = is_multiline && state != NULL && g.ActiveId == GetWindowScrollbarID(draw_window, ImGuiAxis_Y);
 
@@ -4246,6 +4250,10 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         const bool is_undo  = ((is_shortcut_key && IsKeyPressedMap(ImGuiKey_Z)) && !is_readonly && is_undoable);
         const bool is_redo  = ((is_shortcut_key && IsKeyPressedMap(ImGuiKey_Y)) || (is_osx_shift_shortcut && IsKeyPressedMap(ImGuiKey_Z))) && !is_readonly && is_undoable;
 
+        // We allow validate/cancel with Nav source (gamepad) to makes it easier to undo an accidental NavInput press with no keyboard wired, but otherwise it isn't very useful.
+        const bool is_validate = IsKeyPressedMap(ImGuiKey_Enter) || IsKeyPressedMap(ImGuiKey_KeyPadEnter) || IsNavInputTest(ImGuiNavInput_Activate, ImGuiInputReadMode_Pressed) || IsNavInputTest(ImGuiNavInput_Input, ImGuiInputReadMode_Pressed);
+        const bool is_cancel   = IsKeyPressedMap(ImGuiKey_Escape) || IsNavInputTest(ImGuiNavInput_Cancel, ImGuiInputReadMode_Pressed);
+
         if (IsKeyPressedMap(ImGuiKey_LeftArrow))                        { state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINESTART : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDLEFT : STB_TEXTEDIT_K_LEFT) | k_mask); }
         else if (IsKeyPressedMap(ImGuiKey_RightArrow))                  { state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINEEND : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDRIGHT : STB_TEXTEDIT_K_RIGHT) | k_mask); }
         else if (IsKeyPressedMap(ImGuiKey_UpArrow) && is_multiline)     { if (io.KeyCtrl) SetScrollY(draw_window, ImMax(draw_window->Scroll.y - g.FontSize, 0.0f)); else state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_TEXTSTART : STB_TEXTEDIT_K_UP) | k_mask); }
@@ -4266,7 +4274,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             }
             state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
         }
-        else if (IsKeyPressedMap(ImGuiKey_Enter) || IsKeyPressedMap(ImGuiKey_KeyPadEnter))
+        else if (is_validate)
         {
             bool ctrl_enter_for_new_line = (flags & ImGuiInputTextFlags_CtrlEnterForNewLine) != 0;
             if (!is_multiline || (ctrl_enter_for_new_line && !io.KeyCtrl) || (!ctrl_enter_for_new_line && io.KeyCtrl))
@@ -4280,7 +4288,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                     state->OnKeyPressed((int)c);
             }
         }
-        else if (IsKeyPressedMap(ImGuiKey_Escape))
+        else if (is_cancel)
         {
             clear_active_id = cancel_edit = true;
         }
@@ -6960,11 +6968,12 @@ void ImGui::EndMenu()
     // However, it means that with the current code, a BeginMenu() from outside another menu or a menu-bar won't be closable with the Left direction.
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
-    if (g.NavWindow && g.NavWindow->ParentWindow == window && g.NavMoveDir == ImGuiDir_Left && NavMoveRequestButNoResultYet() && window->DC.LayoutType == ImGuiLayoutType_Vertical)
-    {
-        ClosePopupToLevel(g.BeginPopupStack.Size, true);
-        NavMoveRequestCancel();
-    }
+    if (g.NavMoveDir == ImGuiDir_Left && NavMoveRequestButNoResultYet() && window->DC.LayoutType == ImGuiLayoutType_Vertical)
+        if (g.NavWindow && (g.NavWindow->RootWindowForNav->Flags & ImGuiWindowFlags_Popup) && g.NavWindow->RootWindowForNav->ParentWindow == window)
+        {
+            ClosePopupToLevel(g.BeginPopupStack.Size, true);
+            NavMoveRequestCancel();
+        }
 
     EndPopup();
 }

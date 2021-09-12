@@ -3106,7 +3106,7 @@ void ImGui::SetActiveID(ImGuiID id, ImGuiWindow* window)
     if (id)
     {
         g.ActiveIdIsAlive = id;
-        g.ActiveIdSource = (g.NavActivateId == id || g.NavInputId == id || g.NavJustTabbedId == id || g.NavJustMovedToId == id) ? ImGuiInputSource_Nav : ImGuiInputSource_Mouse;
+        g.ActiveIdSource = (g.NavActivateId == id || g.NavActivateInputId == id || g.NavJustTabbedId == id || g.NavJustMovedToId == id) ? ImGuiInputSource_Nav : ImGuiInputSource_Mouse;
     }
 
     // Clear declaration of inputs claimed by the widget
@@ -6740,37 +6740,31 @@ bool ImGui::IsWindowHovered(ImGuiHoveredFlags flags)
 {
     IM_ASSERT((flags & ImGuiHoveredFlags_AllowWhenOverlapped) == 0);   // Flags not supported by this function
     ImGuiContext& g = *GImGui;
-    if (g.HoveredWindow == NULL)
+    ImGuiWindow* ref_window = g.HoveredWindow;
+    ImGuiWindow* cur_window = g.CurrentWindow;
+    if (ref_window == NULL)
         return false;
 
     if ((flags & ImGuiHoveredFlags_AnyWindow) == 0)
     {
-        ImGuiWindow* window = g.CurrentWindow;
-        switch (flags & (ImGuiHoveredFlags_RootWindow | ImGuiHoveredFlags_ChildWindows))
-        {
-        case ImGuiHoveredFlags_RootWindow | ImGuiHoveredFlags_ChildWindows:
-            if (g.HoveredWindow->RootWindow != window->RootWindow)
-                return false;
-            break;
-        case ImGuiHoveredFlags_RootWindow:
-            if (g.HoveredWindow != window->RootWindow)
-                return false;
-            break;
-        case ImGuiHoveredFlags_ChildWindows:
-            if (!IsWindowChildOf(g.HoveredWindow, window))
-                return false;
-            break;
-        default:
-            if (g.HoveredWindow != window)
-                return false;
-            break;
-        }
+        IM_ASSERT(cur_window); // Not inside a Begin()/End()
+
+        if (flags & ImGuiHoveredFlags_RootWindow)
+            cur_window = cur_window->RootWindow;
+
+        bool result;
+        if (flags & ImGuiHoveredFlags_ChildWindows)
+            result = IsWindowChildOf(ref_window, cur_window);
+        else
+            result = (ref_window == cur_window);
+        if (!result)
+            return false;
     }
 
-    if (!IsWindowContentHoverable(g.HoveredWindow, flags))
+    if (!IsWindowContentHoverable(ref_window, flags))
         return false;
     if (!(flags & ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
-        if (g.ActiveId != 0 && !g.ActiveIdAllowOverlap && g.ActiveId != g.HoveredWindow->MoveId)
+        if (g.ActiveId != 0 && !g.ActiveIdAllowOverlap && g.ActiveId != ref_window->MoveId)
             return false;
     return true;
 }
@@ -6778,22 +6772,22 @@ bool ImGui::IsWindowHovered(ImGuiHoveredFlags flags)
 bool ImGui::IsWindowFocused(ImGuiFocusedFlags flags)
 {
     ImGuiContext& g = *GImGui;
+    ImGuiWindow* ref_window = g.NavWindow;
+    ImGuiWindow* cur_window = g.CurrentWindow;
 
+    if (ref_window == NULL)
+        return false;
     if (flags & ImGuiFocusedFlags_AnyWindow)
-        return g.NavWindow != NULL;
+        return true;
+    IM_ASSERT(cur_window); // Not inside a Begin()/End()
 
-    IM_ASSERT(g.CurrentWindow);     // Not inside a Begin()/End()
-    switch (flags & (ImGuiFocusedFlags_RootWindow | ImGuiFocusedFlags_ChildWindows))
-    {
-    case ImGuiFocusedFlags_RootWindow | ImGuiFocusedFlags_ChildWindows:
-        return g.NavWindow && g.NavWindow->RootWindow == g.CurrentWindow->RootWindow;
-    case ImGuiFocusedFlags_RootWindow:
-        return g.NavWindow == g.CurrentWindow->RootWindow;
-    case ImGuiFocusedFlags_ChildWindows:
-        return g.NavWindow && IsWindowChildOf(g.NavWindow, g.CurrentWindow);
-    default:
-        return g.NavWindow == g.CurrentWindow;
-    }
+    if (flags & ImGuiHoveredFlags_RootWindow)
+        cur_window = cur_window->RootWindow;
+
+    if (flags & ImGuiHoveredFlags_ChildWindows)
+        return IsWindowChildOf(ref_window, cur_window);
+    else
+        return (ref_window == cur_window);
 }
 
 // Can we focus this window with CTRL+TAB (or PadMenu + PadFocusPrev/PadFocusNext)
@@ -7063,6 +7057,7 @@ void ImGui::ActivateItem(ImGuiID id)
 {
     ImGuiContext& g = *GImGui;
     g.NavNextActivateId = id;
+    g.NavNextActivateFlags = ImGuiActivateFlags_None;
 }
 
 void ImGui::PushFocusScope(ImGuiID id)
@@ -7813,6 +7808,7 @@ ImVec2 ImGui::GetWindowContentRegionMax()
 
 // Lock horizontal starting position + capture group bounding box into one "item" (so you can use IsItemHovered() or layout primitives such as SameLine() on whole group, etc.)
 // Groups are currently a mishmash of functionalities which should perhaps be clarified and separated.
+// FIXME-OPT: Could we safely early out on ->SkipItems?
 void ImGui::BeginGroup()
 {
     ImGuiContext& g = *GImGui;
@@ -9231,19 +9227,28 @@ static void ImGui::NavUpdate()
     NavUpdateCancelRequest();
 
     // Process manual activation request
-    g.NavActivateId = g.NavActivateDownId = g.NavActivatePressedId = g.NavInputId = 0;
+    g.NavActivateId = g.NavActivateDownId = g.NavActivatePressedId = g.NavActivateInputId = 0;
+    g.NavActivateFlags = ImGuiActivateFlags_None;
     if (g.NavId != 0 && !g.NavDisableHighlight && !g.NavWindowingTarget && g.NavWindow && !(g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs))
     {
         bool activate_down = IsNavInputDown(ImGuiNavInput_Activate);
+        bool input_down = IsNavInputDown(ImGuiNavInput_Input);
         bool activate_pressed = activate_down && IsNavInputTest(ImGuiNavInput_Activate, ImGuiInputReadMode_Pressed);
+        bool input_pressed = input_down && IsNavInputTest(ImGuiNavInput_Input, ImGuiInputReadMode_Pressed);
         if (g.ActiveId == 0 && activate_pressed)
+        {
             g.NavActivateId = g.NavId;
+            g.NavActivateFlags = ImGuiActivateFlags_PreferTweak;
+        }
+        if ((g.ActiveId == 0 || g.ActiveId == g.NavId) && input_pressed)
+        {
+            g.NavActivateInputId = g.NavId;
+            g.NavActivateFlags = ImGuiActivateFlags_PreferInput;
+        }
         if ((g.ActiveId == 0 || g.ActiveId == g.NavId) && activate_down)
             g.NavActivateDownId = g.NavId;
         if ((g.ActiveId == 0 || g.ActiveId == g.NavId) && activate_pressed)
             g.NavActivatePressedId = g.NavId;
-        if ((g.ActiveId == 0 || g.ActiveId == g.NavId) && IsNavInputTest(ImGuiNavInput_Input, ImGuiInputReadMode_Pressed))
-            g.NavInputId = g.NavId;
     }
     if (g.NavWindow && (g.NavWindow->Flags & ImGuiWindowFlags_NoNavInputs))
         g.NavDisableHighlight = true;
@@ -9253,7 +9258,13 @@ static void ImGui::NavUpdate()
     // Process programmatic activation request
     // FIXME-NAV: Those should eventually be queued (unlike focus they don't cancel each others)
     if (g.NavNextActivateId != 0)
-        g.NavActivateId = g.NavActivateDownId = g.NavActivatePressedId = g.NavInputId = g.NavNextActivateId;
+    {
+        if (g.NavNextActivateFlags & ImGuiActivateFlags_PreferInput)
+            g.NavActivateInputId = g.NavNextActivateId;
+        else
+            g.NavActivateId = g.NavActivateDownId = g.NavActivatePressedId = g.NavNextActivateId;
+        g.NavActivateFlags = g.NavNextActivateFlags;
+    }
     g.NavNextActivateId = 0;
 
     // Process move requests
@@ -9978,14 +9989,16 @@ bool ImGui::BeginDragDropSource(ImGuiDragDropFlags flags)
                 return false;
             if (g.ActiveIdMouseButton != -1)
                 mouse_button = g.ActiveIdMouseButton;
-            if (g.IO.MouseDown[mouse_button] == false)
+            if (g.IO.MouseDown[mouse_button] == false || window->SkipItems)
                 return false;
             g.ActiveIdAllowOverlap = false;
         }
         else
         {
             // Uncommon path: items without ID
-            if (g.IO.MouseDown[mouse_button] == false)
+            if (g.IO.MouseDown[mouse_button] == false || window->SkipItems)
+                return false;
+            if ((g.LastItemData.StatusFlags & ImGuiItemStatusFlags_HoveredRect) == 0 && (g.ActiveId == 0 || g.ActiveIdWindow != window))
                 return false;
 
             // If you want to use BeginDragDropSource() on an item with no unique identifier for interaction, such as Text() or Image(), you need to:
@@ -9995,10 +10008,6 @@ bool ImGui::BeginDragDropSource(ImGuiDragDropFlags flags)
                 IM_ASSERT(0);
                 return false;
             }
-
-            // Early out
-            if ((g.LastItemData.StatusFlags & ImGuiItemStatusFlags_HoveredRect) == 0 && (g.ActiveId == 0 || g.ActiveIdWindow != window))
-                return false;
 
             // Magic fallback (=somehow reprehensible) to handle items with no assigned ID, e.g. Text(), Image()
             // We build a throwaway ID based on current ID stack + relative AABB of items in window.
@@ -10165,7 +10174,7 @@ bool ImGui::BeginDragDropTarget()
     if (!(g.LastItemData.StatusFlags & ImGuiItemStatusFlags_HoveredRect))
         return false;
     ImGuiWindow* hovered_window = g.HoveredWindowUnderMovingWindow;
-    if (hovered_window == NULL || window->RootWindow != hovered_window->RootWindow)
+    if (hovered_window == NULL || window->RootWindow != hovered_window->RootWindow || window->SkipItems)
         return false;
 
     const ImRect& display_rect = (g.LastItemData.StatusFlags & ImGuiItemStatusFlags_HasDisplayRect) ? g.LastItemData.DisplayRect : g.LastItemData.Rect;
@@ -11394,7 +11403,8 @@ void ImGui::ShowMetricsWindow(bool* p_open)
         Text("NavId: 0x%08X, NavLayer: %d", g.NavId, g.NavLayer);
         Text("NavInputSource: %s", input_source_names[g.NavInputSource]);
         Text("NavActive: %d, NavVisible: %d", g.IO.NavActive, g.IO.NavVisible);
-        Text("NavActivateId: 0x%08X, NavInputId: 0x%08X", g.NavActivateId, g.NavInputId);
+        Text("NavActivateId/DownId/PressedId/InputId: %08X/%08X/%08X/%08X", g.NavActivateId, g.NavActivateDownId, g.NavActivatePressedId, g.NavActivateInputId);
+        Text("NavActivateFlags: %04X", g.NavActivateFlags);
         Text("NavDisableHighlight: %d, NavDisableMouseHover: %d", g.NavDisableHighlight, g.NavDisableMouseHover);
         Text("NavFocusScopeId = 0x%08X", g.NavFocusScopeId);
         Text("NavWindowingTarget: '%s'", g.NavWindowingTarget ? g.NavWindowingTarget->Name : "NULL");
