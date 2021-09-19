@@ -205,7 +205,7 @@ void ImGui::TextEx(const char* text, const char* text_end, ImGuiTextFlags flags)
             ImRect line_rect(pos, pos + ImVec2(FLT_MAX, line_height));
             while (line < text_end)
             {
-                if (IsClippedEx(line_rect, 0, false))
+                if (IsClippedEx(line_rect, 0))
                     break;
 
                 const char* line_end = (const char*)memchr(line, '\n', text_end - line);
@@ -571,6 +571,8 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
                         ClearActiveID();
                     else
                         SetActiveID(id, window); // Hold on ID
+                    if (!(flags & ImGuiButtonFlags_NoNavFocus))
+                        SetFocusID(id, window);
                     g.ActiveIdMouseButton = mouse_button_clicked;
                     FocusWindow(window);
                 }
@@ -581,6 +583,8 @@ bool ImGui::ButtonBehavior(const ImRect& bb, ImGuiID id, bool* out_hovered, bool
                 const bool has_repeated_at_least_once = (flags & ImGuiButtonFlags_Repeat) && g.IO.MouseDownDurationPrev[mouse_button_released] >= g.IO.KeyRepeatDelay;
                 if (!has_repeated_at_least_once)
                     pressed = true;
+                if (!(flags & ImGuiButtonFlags_NoNavFocus))
+                    SetFocusID(id, window);
                 ClearActiveID();
             }
 
@@ -3986,6 +3990,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         window->DC.CursorPos = backup_pos;
 
         // We reproduce the contents of BeginChildFrame() in order to provide 'label' so our window internal data are easier to read/debug.
+        // FIXME-NAV: Pressing NavActivate will trigger general child activation right before triggering our own below. Harmless but bizarre.
         PushStyleColor(ImGuiCol_ChildBg, style.Colors[ImGuiCol_FrameBg]);
         PushStyleVar(ImGuiStyleVar_ChildRounding, style.FrameRounding);
         PushStyleVar(ImGuiStyleVar_ChildBorderSize, style.FrameBorderSize);
@@ -4023,7 +4028,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     const bool focus_requested_by_tabbing = (item_status_flags & ImGuiItemStatusFlags_FocusedByTabbing) != 0;
 
     const bool user_clicked = hovered && io.MouseClicked[0];
-    const bool user_nav_input_start = (g.ActiveId != id) && ((g.NavActivateInputId == id) || (g.NavActivateId == id && g.NavInputSource == ImGuiInputSource_Keyboard));
+    const bool user_nav_input_start = (g.ActiveId != id) && (g.NavActivateInputId == id || g.NavActivateId == id);
     const bool user_scroll_finish = is_multiline && state != NULL && g.ActiveId == 0 && g.ActiveIdPreviousFrame == GetWindowScrollbarID(draw_window, ImGuiAxis_Y);
     const bool user_scroll_active = is_multiline && state != NULL && g.ActiveId == GetWindowScrollbarID(draw_window, ImGuiAxis_Y);
 
@@ -4251,7 +4256,8 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         const bool is_redo  = ((is_shortcut_key && IsKeyPressedMap(ImGuiKey_Y)) || (is_osx_shift_shortcut && IsKeyPressedMap(ImGuiKey_Z))) && !is_readonly && is_undoable;
 
         // We allow validate/cancel with Nav source (gamepad) to makes it easier to undo an accidental NavInput press with no keyboard wired, but otherwise it isn't very useful.
-        const bool is_validate = IsKeyPressedMap(ImGuiKey_Enter) || IsKeyPressedMap(ImGuiKey_KeyPadEnter) || IsNavInputTest(ImGuiNavInput_Activate, ImGuiInputReadMode_Pressed) || IsNavInputTest(ImGuiNavInput_Input, ImGuiInputReadMode_Pressed);
+        const bool is_validate_enter = IsKeyPressedMap(ImGuiKey_Enter) || IsKeyPressedMap(ImGuiKey_KeyPadEnter);
+        const bool is_validate_nav = (IsNavInputTest(ImGuiNavInput_Activate, ImGuiInputReadMode_Pressed) && !IsKeyPressedMap(ImGuiKey_Space)) || IsNavInputTest(ImGuiNavInput_Input, ImGuiInputReadMode_Pressed);
         const bool is_cancel   = IsKeyPressedMap(ImGuiKey_Escape) || IsNavInputTest(ImGuiNavInput_Cancel, ImGuiInputReadMode_Pressed);
 
         if (IsKeyPressedMap(ImGuiKey_LeftArrow))                        { state->OnKeyPressed((is_startend_key_down ? STB_TEXTEDIT_K_LINESTART : is_wordmove_key_down ? STB_TEXTEDIT_K_WORDLEFT : STB_TEXTEDIT_K_LEFT) | k_mask); }
@@ -4274,7 +4280,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             }
             state->OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask);
         }
-        else if (is_validate)
+        else if (is_validate_enter)
         {
             bool ctrl_enter_for_new_line = (flags & ImGuiInputTextFlags_CtrlEnterForNewLine) != 0;
             if (!is_multiline || (ctrl_enter_for_new_line && !io.KeyCtrl) || (!ctrl_enter_for_new_line && io.KeyCtrl))
@@ -4287,6 +4293,11 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
                 if (InputTextFilterCharacter(&c, flags, callback, callback_user_data, ImGuiInputSource_Keyboard))
                     state->OnKeyPressed((int)c);
             }
+        }
+        else if (is_validate_nav)
+        {
+            IM_ASSERT(!is_validate_enter);
+            enter_pressed = clear_active_id = true;
         }
         else if (is_cancel)
         {
@@ -5979,7 +5990,7 @@ void ImGui::TreePush(const char* str_id)
     ImGuiWindow* window = GetCurrentWindow();
     Indent();
     window->DC.TreeDepth++;
-    PushID(str_id ? str_id : "#TreePush");
+    PushID(str_id);
 }
 
 void ImGui::TreePush(const void* ptr_id)
@@ -5987,7 +5998,7 @@ void ImGui::TreePush(const void* ptr_id)
     ImGuiWindow* window = GetCurrentWindow();
     Indent();
     window->DC.TreeDepth++;
-    PushID(ptr_id ? ptr_id : (const void*)"#TreePush");
+    PushID(ptr_id);
 }
 
 void ImGui::TreePushOverrideID(ImGuiID id)
@@ -6847,7 +6858,7 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
     }
     else
     {
-        // Menu inside a menu
+        // Menu inside a regular/vertical menu
         // (In a typical menu window where all items are BeginMenu() or MenuItem() calls, extra_w will always be 0.0f.
         //  Only when they are other items sticking out we're going to add spacing, yet only register minimum width into the layout system.
         popup_pos = ImVec2(pos.x, pos.y - style.WindowPadding.y);
@@ -7003,10 +7014,11 @@ bool ImGui::MenuItemEx(const char* label, const char* icon, const char* shortcut
         // Note that in this situation: we don't render the shortcut, we render a highlight instead of the selected tick mark.
         float w = label_size.x;
         window->DC.CursorPos.x += IM_FLOOR(style.ItemSpacing.x * 0.5f);
+        ImVec2 text_pos(window->DC.CursorPos.x + offsets->OffsetLabel, window->DC.CursorPos.y + window->DC.CurrLineTextBaseOffset);
         PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x * 2.0f, style.ItemSpacing.y));
         pressed = Selectable("", selected, flags, ImVec2(w, 0.0f));
         PopStyleVar();
-        RenderText(pos + ImVec2(offsets->OffsetLabel, 0.0f), label);
+        RenderText(text_pos, label);
         window->DC.CursorPos.x += IM_FLOOR(style.ItemSpacing.x * (-1.0f + 0.5f)); // -1 spacing to compensate the spacing added when Selectable() did a SameLine(). It would also work to call SameLine() ourselves after the PopStyleVar().
     }
     else
