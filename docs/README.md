@@ -16,7 +16,7 @@ Individuals: support continued development and maintenance [here](https://www.pa
 
 | [The Pitch](#the-pitch) - [Usage](#usage) - [How it works](#how-it-works) - [Releases & Changelogs](#releases--changelogs) - [Demo](#demo) - [Integration](#integration) |
 :----------------------------------------------------------: |
-| [Upcoming changes](#upcoming-changes) - [Gallery](#gallery) - [Support, FAQ](#support-frequently-asked-questions-faq) -  [How to help](#how-to-help) - [Sponsors](#sponsors) - [Credits](#credits) - [License](#license) |
+| [Upcoming changes](#upcoming-changes) - [Gallery](#gallery) - [Support, FAQ](#support-frequently-asked-questions-faq) -  [How to help](#how-to-help) - [Sponsors](https://github.com/ocornut/imgui/wiki/Sponsors) - [Credits](#credits) - [License](#license) |
 | [Wiki](https://github.com/ocornut/imgui/wiki) - [Languages & frameworks backends/bindings](https://github.com/ocornut/imgui/wiki/Bindings) - [Software using Dear ImGui](https://github.com/ocornut/imgui/wiki/Software-using-dear-imgui) - [User quotes](https://github.com/ocornut/imgui/wiki/Quotes) |
 
 ### The Pitch
@@ -27,13 +27,12 @@ Dear ImGui is designed to **enable fast iterations** and to **empower programmer
 
 Dear ImGui is particularly suited to integration in games engine (for tooling), real-time 3D applications, fullscreen applications, embedded applications, or any applications on consoles platforms where operating system features are non-standard.
 
-
+ - Minimize state synchronization.
+ - Minimize state storage on user side.
+ - Minimize setup and maintenance.
  - Easy to use to create code-driven and data-driven tools.
  - Easy to use to create ad hoc short-lived tools and long-lived, more elaborate tools.
  - Easy to hack and improve.
- - Minimize setup and maintenance.
- - Minimize state storage on user side.
- - Minimize state synchronization.
  - Portable, minimize dependencies, run on target (consoles, phones, etc.).
  - Efficient runtime and memory consumption.
  - Battle-tested, used by many major actors in the game industry.
@@ -115,7 +114,7 @@ Calling the `ImGui::ShowDemoWindow()` function will create a demo window showcas
 ![screenshot demo](https://raw.githubusercontent.com/wiki/ocornut/imgui/web/v167/v167-misc.png)
 
 You should be able to build the examples from sources (tested on Windows/Mac/Linux). If you don't, let us know! If you want to have a quick look at some Dear ImGui features, you can download Windows binaries of the demo app here:
-- [imgui-demo-binaries-20210331.zip](https://www.dearimgui.org/binaries/imgui-demo-binaries-20210331.zip) (Windows, 1.83 WIP, built 2021/03/31, master branch) or [older demo binaries](https://www.dearimgui.org/binaries).
+- [imgui-demo-binaries-20220504.zip](https://www.dearimgui.org/binaries/imgui-demo-binaries-20220504.zip) (Windows, 1.88 WIP, built 2022/05/04, master branch) or [older demo binaries](https://www.dearimgui.org/binaries).
 
 The demo applications are not DPI aware so expect some blurriness on a 4K screen. For DPI awareness in your application, you can load/reload your font at different scale, and scale your style with `style.ScaleAllSizes()` (see [FAQ](https://www.dearimgui.org/faq)).
 
@@ -151,9 +150,12 @@ Some of the goals for 2022 are:
 
 ### Gallery
 
-For more user-submitted screenshots of projects using Dear ImGui, check out the [Gallery Threads](https://github.com/ocornut/imgui/issues/4451)!
+For more user-submitted screenshots of projects using Dear ImGui, check out the [Gallery Threads](https://github.com/ocornut/imgui/issues/5243)!
 
 For a list of third-party widgets and extensions, check out the [Useful Extensions/Widgets](https://github.com/ocornut/imgui/wiki/Useful-Extensions) wiki page.
+
+Custom engine [ehre](https://github.com/tksuoran/erhe) (docking branch)
+[![ehre](https://user-images.githubusercontent.com/8225057/166686854-3f76bf28-0442-4fac-8e65-9fc9650d2ed0.jpg)](https://user-images.githubusercontent.com/994606/147875067-a848991e-2ad2-4fd3-bf71-4aeb8a547bcf.png)
 
 Custom engine for [Wonder Boy: The Dragon's Trap](http://www.TheDragonsTrap.com) (2017)
 [![screenshot game](https://raw.githubusercontent.com/wiki/ocornut/imgui/web/v149/gallery_TheDragonsTrap-01-thumb.jpg)](https://cloud.githubusercontent.com/assets/8225057/20628927/33e14cac-b329-11e6-80f6-9524e93b048a.png)
@@ -180,13 +182,13 @@ Private support is available for paying business customers (E-mail: _contact @ d
 
 **Which version should I get?**
 
-We occasionally tag [Releases](https://github.com/ocornut/imgui/releases) but it is generally safe and recommended to sync to master/latest. The library is fairly stable and regressions tend to be fixed fast when reported.
+We occasionally tag [Releases](https://github.com/ocornut/imgui/releases) (with nice releases notes) but it is generally safe and recommended to sync to master/latest. The library is fairly stable and regressions tend to be fixed fast when reported.
 
 Advanced users may want to use the `docking` branch with [Multi-Viewport](https://github.com/ocornut/imgui/issues/1542) and [Docking](https://github.com/ocornut/imgui/issues/2109) features. This branch is kept in sync with master regularly.
 
 **Who uses Dear ImGui?**
 
-See the [Quotes](https://github.com/ocornut/imgui/wiki/Quotes), [Sponsors](https://github.com/ocornut/imgui/wiki/Sponsors), [Software using dear imgui](https://github.com/ocornut/imgui/wiki/Software-using-dear-imgui) Wiki pages for an idea of who is using Dear ImGui. Please add your game/software if you can! Also see the [Gallery Threads](https://github.com/ocornut/imgui/issues/4451)!
+See the [Quotes](https://github.com/ocornut/imgui/wiki/Quotes), [Sponsors](https://github.com/ocornut/imgui/wiki/Sponsors), [Software using dear imgui](https://github.com/ocornut/imgui/wiki/Software-using-dear-imgui) Wiki pages for an idea of who is using Dear ImGui. Please add your game/software if you can! Also see the [Gallery Threads](https://github.com/ocornut/imgui/issues/5243)!
 
 How to help
 -----------
@@ -196,31 +198,14 @@ How to help
 - See [GitHub Forum/issues](https://github.com/ocornut/imgui/issues) and [Github Discussions](https://github.com/ocornut/imgui/discussions).
 - You may help with development and submit pull requests! Please understand that by submitting a PR you are also submitting a request for the maintainer to review your code and then take over its maintenance forever. PR should be crafted both in the interest in the end-users and also to ease the maintainer into understanding and accepting it.
 - See [Help wanted](https://github.com/ocornut/imgui/wiki/Help-Wanted) on the [Wiki](https://github.com/ocornut/imgui/wiki/) for some more ideas.
-- Have your company financially support this project (please reach by e-mail)
-
-**How can I help financing further development of Dear ImGui?**
-
-See [Sponsors](https://github.com/ocornut/imgui/wiki/Sponsors) page.
+- Have your company financially support this project (please reach by e-mail to say hi!).
 
 Sponsors
 --------
 
-Ongoing Dear ImGui development is currently financially supported in 2021-2022 by users and private sponsors:
-
-*Platinum-chocolate sponsors*
-- [Blizzard](https://careers.blizzard.com/en-us/openings/engineering/all/all/all/1)
-
-*Double-chocolate sponsors*
-- [Ubisoft](https://montreal.ubisoft.com/en/ubisoft-sponsors-user-interface-library-for-c-dear-imgui), [Supercell](https://supercell.com)
-
-*Chocolate sponsors*
-- [Adobe](https://www.adobe.com/products/medium.html), [Aras Pranckevičius](https://aras-p.info), [Epic](https://www.unrealengine.com/en-US/megagrants), [G3Dvu]().
-
-*Salty-caramel sponsors*
-- [Kylotonn](https://www.kylotonn.com), [O-Net Communications (USA)](http://en.o-netcom.com), [Wonderland Engine](https://wonderlandengine.com/).
-
-Please see [detailed list of Dear ImGui supporters](https://github.com/ocornut/imgui/wiki/Sponsors) for sponsors of past years.
-From November 2014 to December 2019, ongoing development has also been financially supported by its users on Patreon and through individual donations.
+Ongoing Dear ImGui development is and has been financially supported by users and private sponsors.
+<BR>Please see **[detailed list of current and past Dear ImGui supporters](https://github.com/ocornut/imgui/wiki/Sponsors)** for details.
+<BR>From November 2014 to December 2019, ongoing development has also been financially supported by its users on Patreon and through individual donations.
 
 **THANK YOU to all past and present supporters for helping to keep this project alive and thriving!**
 
@@ -234,8 +219,7 @@ Credits
 
 Developed by [Omar Cornut](https://www.miracleworld.net) and every direct or indirect [contributors](https://github.com/ocornut/imgui/graphs/contributors) to the GitHub. The early version of this library was developed with the support of [Media Molecule](https://www.mediamolecule.com) and first used internally on the game [Tearaway](https://tearaway.mediamolecule.com) (PS Vita).
 
-Recurring contributors (2020): Omar Cornut [@ocornut](https://github.com/ocornut), Rokas Kupstys [@rokups](https://github.com/rokups), Ben Carter [@ShironekoBen](https://github.com/ShironekoBen).
-A large portion of work on automation systems, regression tests and other features are currently unpublished.
+Recurring contributors (2022): Omar Cornut [@ocornut](https://github.com/ocornut), Rokas Kupstys [@rokups](https://github.com/rokups) (a large portion of work on automation systems, regression tests and other features are currently unpublished).
 
 Sponsoring, support contracts and other B2B transactions are hosted and handled by [Lizardcube](https://www.lizardcube.com).
 
